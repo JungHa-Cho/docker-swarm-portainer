@@ -1,0 +1,60 @@
+version: '3.7'
+
+services:
+  agent:
+    image: portainer/agent
+    environment:
+      AGENT_CLUSTER_ADDR: tasks.agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    networks:
+      - private
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.platform.os == linux
+
+  portainer:
+    image: portainer/portainer
+    command: -H tcp://tasks.agent:9001 --tlsskipverify
+    volumes:
+      - portainer-data:/data
+    networks:
+      - private
+      - public
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=public"
+        - "traefik.http.services.frontend-portainer.loadbalancer.server.port=9000"
+
+        - "traefik.http.routers.unsecured-portainer.rule=Host(`portainer.${DOMAIN}`)"
+        - "traefik.http.routers.unsecured-portainer.entrypoints=entrypoint-http"
+        - "traefik.http.routers.unsecured-portainer.middlewares=secured-redirectscheme@docker"
+        - "traefik.http.middlewares.secured-redirectscheme.redirectscheme.scheme=https"
+
+        - "traefik.http.routers.secured-portainer.rule=Host(`portainer.${DOMAIN}`)"
+        - "traefik.http.routers.secured-portainer.entrypoints=entrypoint-https"
+        - "traefik.http.routers.secured-portainer.tls=true"
+        - "traefik.http.routers.secured-portainer.tls.certresolver=swarm-proxy"
+        #- "traefik.http.routers.secured-portainer.middlewares=basicauth-portainer@docker"
+        #- "traefik.http.middlewares.basicauth-portainer.basicauth.usersfile=/etc/htpasswd"
+
+#configs:
+#  portainer_htpasswd:
+#    file: ./htpasswd
+
+networks:
+  private:
+    driver: overlay
+    name: private
+  public:
+    external: true
+
+volumes:
+  portainer-data: {}
